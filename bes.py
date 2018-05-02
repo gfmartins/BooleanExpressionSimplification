@@ -30,7 +30,7 @@ ASSO = {'&': 'right',
         '|': 'right',
         '~': 'left'}
 
-FUN_OPS = {"|": or_, "&": and_, ">": imp, "~": not_, "^": xor, "/":  dys}
+FUN_OPS = {"|": or_, "&": and_, ">": imp, "~": not_, "^": xor, "/": dys}
 
 
 def main():
@@ -38,12 +38,38 @@ def main():
     dane = f.read().splitlines()
     f.close()
     for e in dane:
-        a = get_minimal_valid_subset(reduce(get_args_that_give_one(e)), get_args_that_give_one(e))
-        print(e, "   ", a)
-    k = "(a|b)|(c|a|b)"
-    l = get_minimal_valid_subset(reduce(get_args_that_give_one(k)), get_args_that_give_one(k))
-    print(l)
-    
+        if validate(e):
+            e = parse(e)
+            print(e, " ", simplify(e))
+        else:
+            print("ERROR")
+
+
+def simplify(expression):
+    v = get_arguments_list(expression)
+    o = get_args_that_give_logic_one(expression)
+    a = get_minimal_valid_subset(reduce(o), o)
+    sum_of_products = print_sum_of_products(a, v)
+    if give_the_same_logic_value(expression, sum_of_products):
+        infix = sum_of_products
+    else:
+        infix = expression
+    postfix = convert_infix_to_postfix(infix)
+    prefix = convert_postfix_to_prefix(postfix)
+    use_xor = find_xor(prefix)
+    use_implication = "".join(find_implications(prefix))
+    candidates = [expression, sum_of_products, use_xor, use_implication]
+    result = [(e, len(e)) for e in candidates if give_the_same_logic_value(expression, e)]
+    result.sort(key=lambda tup: tup[1])
+    return result[0][0]
+
+
+def find_the_shortest(quin, xo, implication):
+    a = [quin, xo, implication]
+    a = [(quin, len(quin)), (xo, len(xo)), (implication, len(implication))]
+    a.sort(key=lambda tup: tup[1])  # sorts in place
+    return a
+
 
 def validate(expression):
     """"checks syntactic correctness"""
@@ -71,7 +97,11 @@ def validate(expression):
     return par_count == 0 and not state
 
 
-def convert_to_rpn(expression):
+def parse(expression):
+    return expression.replace(" ", "")
+
+
+def convert_infix_to_postfix(expression):
     """"converts infix to rpn"""
     output = ""
     op_stack = []
@@ -82,7 +112,7 @@ def convert_to_rpn(expression):
         if token in OPS:
             while op_stack and op_stack[-1] != "(" and (PREC[op_stack[-1]] > PREC[token]
                                                         or PREC[op_stack[-1]] > PREC[token]
-                                                        and ASSO[op_stack[-1]] == "left"):
+                and ASSO[op_stack[-1]] == "left"):
                 output += op_stack.pop()
             op_stack.append(token)
         if token == "(":
@@ -91,15 +121,20 @@ def convert_to_rpn(expression):
             while op_stack[-1] != "(":
                 output += op_stack.pop()
             op_stack.pop()
+        # print(output)
     while op_stack:
         output += op_stack.pop()
     return output
 
 
+def get_arguments_list(expression):
+    return sorted(set([x for x in expression if x in VARS]))
+
+
 def map_variable_to_values(rpn_expression, values):
     """"replaces variables present in rpn_expression with values appropriate in terms of order"""
     valued_rpn_expression = ""
-    variables = sorted(set([x for x in rpn_expression if x in VARS]))
+    variables = get_arguments_list(rpn_expression)
     var_to_val = dict(zip(variables, values))
     for token in rpn_expression:
         if token in VARS:
@@ -136,7 +171,6 @@ def evaluate_rpn_expression(rpn_expression, values):
         else:
             res = token
         stack.append(res)
-        # print(stack)
     return str_to_bool(stack.pop())
 
 
@@ -150,7 +184,7 @@ def merge(s1, s2):
             result += "-"
             counter += 1
     if counter == 1:
-            return result
+        return result
     return False
 
 
@@ -184,25 +218,173 @@ def get_minimal_valid_subset(min_products, arguments):
     for min_product in min_products:
         min_products_to_args[min_product] = set([x for x in arguments if can_create(min_product, x)])
     for k in range(1, len(min_products) + 1):
-        # print(k)
         k_elem_min_products_subsets = set(combinations(min_products, k))
         for min_products_subset in k_elem_min_products_subsets:
-            # print("produkt ", list(min_products_subset))
             args = set()
             for min_product in min_products_subset:
-
                 args = args | min_products_to_args[min_product]
-                # print(list(args))
             if len(args) == len(arguments):
-                return min_products_subset
-    return False
+                return list(min_products_subset)
+    return []
 
 
-def get_args_that_give_one(expression):
+def get_args_that_give_logic_one(expression):
     args = generate_all_possible_values(expression)
-    rpn_expression = convert_to_rpn(expression)
+    rpn_expression = convert_infix_to_postfix(expression)
     return [a for a in args if evaluate_rpn_expression(rpn_expression, a)]
+
+
+def print_sum_of_products(expression, variables):
+    if not expression:
+        return 'F'
+    output = []
+    for pro in expression:
+        s = ""
+        for i in range(len(variables)):
+            if pro[i] == '1':
+                s += variables[i]
+            elif pro[i] == '0':
+                s += '~' + variables[i]
+        output.append(s)
+    if output[0] == "":
+        return 'T'
+    output = add_operators(output, '|')
+    res = []
+    for pro in output:
+        res += add_operators(pro, '&')
+    return "".join(res)
+
+
+def add_operators(expression, operator):
+    out = []
+    for i in range(len(expression)):
+        out.append(expression[i])
+        if i != len(expression)-1 and expression[i] != '~':
+            out.append(operator)
+    return out
+
+
+def convert_postfix_to_prefix(postfix_expression):
+    stack = []
+    for token in postfix_expression:
+        if token in VARS or token in CONST:
+            stack.append(token)
+        elif token == '~':
+            c = stack.pop()
+            stack.append(['~', c])
+        elif token in OPS:
+            c = stack.pop()
+            d = stack.pop()
+            stack.append([token, d, c])
+    return stack[0]
+
+
+def find_implications(prefix_expression):
+    if len(prefix_expression) != 3:
+        return convert_prefix_to_infix(list(flatten(prefix_expression)))
+    if prefix_expression[0] == '|':
+        if len(prefix_expression[1]) == 2 and len(prefix_expression[2]) != 2:
+            return [find_implications(prefix_expression[1][1]), '>', find_implications(prefix_expression[2])]
+        elif len(prefix_expression[1]) != 2 and len(prefix_expression[2]) == 2:
+            return [find_implications(prefix_expression[2][1]), '>', find_implications(prefix_expression[1])]
+        else:
+            return convert_prefix_to_infix(list(flatten(prefix_expression)))
+    else:
+        return convert_prefix_to_infix(list(flatten(prefix_expression)))
+
+
+def flatten(iterable):
+    for elm in iterable:
+        if isinstance(elm, (list, tuple)):
+            for relm in flatten(elm):
+                yield relm
+        else:
+            yield elm
+
+
+def has_the_same_variables(e1, e2):
+    return get_arguments_list(e1) == get_arguments_list(e2)
+
+
+def find_xor(prefix_expression):
+    if len(prefix_expression) != 3:
+        return convert_prefix_to_infix(list(flatten(prefix_expression)))
+    elif prefix_expression[0] != '|':
+        return convert_prefix_to_infix(list(flatten(prefix_expression)))
+    if not has_the_same_variables(flatten(prefix_expression[1]), flatten(prefix_expression[2])):
+        return convert_prefix_to_infix(list(flatten(prefix_expression)))
+    if len(prefix_expression[1]) != 3 or len(prefix_expression[2]) != 3:
+        return convert_prefix_to_infix(list(flatten(prefix_expression)))
+    if prefix_expression[1][0] != '&' or prefix_expression[2][0] != '&':
+        return convert_prefix_to_infix(list(flatten(prefix_expression)))
+    pairs = []
+    for i in range(1, 3):
+        for j in range(1, 3):
+            if are_negation(prefix_expression[1][i], prefix_expression[2][j]):
+                pairs.append((i, j))
+    if len(pairs) != 2:
+        return convert_prefix_to_infix(list(flatten(prefix_expression)))
+    res = [prefix_expression[1][1], prefix_expression[1][2]]
+    res = list(map(lambda e: e[1] if e[0] == '~' else e, res))
+    res = list(map(lambda e: e if len(e) == 1 else "".join(['(', find_xor(e), ')']), res))
+    return "".join(res[0] + '^' + res[1])
+
+
+def are_negation(prefix_expression1, prefix_expression2):
+    pre1 = list(flatten(prefix_expression1))
+    pre2 = list(flatten(prefix_expression2))
+    if not has_the_same_variables(pre1, pre2):
+        return False
+    pos1 = convert_prefix_to_postfix(pre1)
+    pos2 = convert_prefix_to_postfix(pre2)
+    for ar in generate_all_possible_values(pos1):
+        if evaluate_rpn_expression(pos1, ar) == evaluate_rpn_expression(pos2, ar):
+            return False
+    return True
+
+
+def give_the_same_logic_value(exp1, exp2):
+    pos1 = convert_infix_to_postfix(exp1)
+    pos2 = convert_infix_to_postfix(exp2)
+    for ar in generate_all_possible_values(pos1):
+        if evaluate_rpn_expression(pos1, ar) != evaluate_rpn_expression(pos2, ar):
+            return False
+    return True
+
+
+def convert_prefix_to_postfix(prefix_expression):
+    s = []
+    for token in prefix_expression[::-1]:
+        if token in VARS or token in CONST:
+            out = token
+        elif token == '~':
+            o1 = s.pop()
+            out = o1 + token
+        elif token in OPS:
+            o1 = s.pop()
+            o2 = s.pop()
+            out = o1 + o2 + token
+        s.append(out)
+    return s[0]
+
+
+def convert_prefix_to_infix(prefix_expression):
+    s = []
+    for token in prefix_expression[::-1]:
+        if token in VARS or token in CONST:
+            out = token
+        elif token == '~':
+            o1 = s.pop()
+            out = token + o1
+        elif token in OPS:
+            o1 = s.pop()
+            o2 = s.pop()
+            out = o1 + token + o2
+        s.append(out)
+    return s[0]
 
 
 if __name__ == "__main__":
     main()
+
+
