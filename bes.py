@@ -46,6 +46,7 @@ def main():
 
 
 def simplify(expression):
+    """"simplifies boolean expression using Quine-McCluskey algorithm and looking for implications and xors"""
     v = get_arguments_list(expression)
     o = get_args_that_give_logic_one(expression)
     a = get_minimal_valid_subset(reduce(o), o)
@@ -62,13 +63,6 @@ def simplify(expression):
     result = [(e, len(e)) for e in candidates if give_the_same_logic_value(expression, e)]
     result.sort(key=lambda tup: tup[1])
     return result[0][0]
-
-
-def find_the_shortest(quin, xo, implication):
-    a = [quin, xo, implication]
-    a = [(quin, len(quin)), (xo, len(xo)), (implication, len(implication))]
-    a.sort(key=lambda tup: tup[1])  # sorts in place
-    return a
 
 
 def validate(expression):
@@ -121,7 +115,6 @@ def convert_infix_to_postfix(expression):
             while op_stack[-1] != "(":
                 output += op_stack.pop()
             op_stack.pop()
-        # print(output)
     while op_stack:
         output += op_stack.pop()
     return output
@@ -174,6 +167,7 @@ def evaluate_rpn_expression(rpn_expression, values):
     return str_to_bool(stack.pop())
 
 
+# Quine-McCluskey algorithm
 def merge(s1, s2):
     result = ""
     counter = 0  # changes counter
@@ -214,6 +208,7 @@ def can_create(s1, s2):
 
 
 def get_minimal_valid_subset(min_products, arguments):
+    """"try to find minimal subset of product that covers all other products"""
     min_products_to_args = dict()
     for min_product in min_products:
         min_products_to_args[min_product] = set([x for x in arguments if can_create(min_product, x)])
@@ -229,12 +224,14 @@ def get_minimal_valid_subset(min_products, arguments):
 
 
 def get_args_that_give_logic_one(expression):
+    """"checks what arguments give true"""
     args = generate_all_possible_values(expression)
     rpn_expression = convert_infix_to_postfix(expression)
     return [a for a in args if evaluate_rpn_expression(rpn_expression, a)]
 
 
 def print_sum_of_products(expression, variables):
+    """"returns sum of products - result of Quine-McCluskey algorithm"""
     if not expression:
         return 'F'
     output = []
@@ -264,22 +261,8 @@ def add_operators(expression, operator):
     return out
 
 
-def convert_postfix_to_prefix(postfix_expression):
-    stack = []
-    for token in postfix_expression:
-        if token in VARS or token in CONST:
-            stack.append(token)
-        elif token == '~':
-            c = stack.pop()
-            stack.append(['~', c])
-        elif token in OPS:
-            c = stack.pop()
-            d = stack.pop()
-            stack.append([token, d, c])
-    return stack[0]
-
-
 def find_implications(prefix_expression):
+    """"recursively try to replace '~a|b' for 'a>b'. Unless it's possible, returns infix_expression"""
     if len(prefix_expression) != 3:
         return convert_prefix_to_infix(list(flatten(prefix_expression)))
     if prefix_expression[0] == '|':
@@ -294,6 +277,7 @@ def find_implications(prefix_expression):
 
 
 def flatten(iterable):
+    """generator to flat multi-nested lists"""
     for elm in iterable:
         if isinstance(elm, (list, tuple)):
             for relm in flatten(elm):
@@ -307,6 +291,7 @@ def has_the_same_variables(e1, e2):
 
 
 def find_xor(prefix_expression):
+    """"recursively try to replace '(a&~b)|(~a&b)' for 'a^b'. Unless it's possible, returns infix_expression"""
     if len(prefix_expression) != 3:
         return convert_prefix_to_infix(list(flatten(prefix_expression)))
     elif prefix_expression[0] != '|':
@@ -331,6 +316,7 @@ def find_xor(prefix_expression):
 
 
 def are_negation(prefix_expression1, prefix_expression2):
+    """"checks if two expression give opposite results"""
     pre1 = list(flatten(prefix_expression1))
     pre2 = list(flatten(prefix_expression2))
     if not has_the_same_variables(pre1, pre2):
@@ -344,6 +330,7 @@ def are_negation(prefix_expression1, prefix_expression2):
 
 
 def give_the_same_logic_value(exp1, exp2):
+    """"checks if evaluation of two expressions is the same for all arguments"""
     pos1 = convert_infix_to_postfix(exp1)
     pos2 = convert_infix_to_postfix(exp2)
     for ar in generate_all_possible_values(pos1):
@@ -352,9 +339,25 @@ def give_the_same_logic_value(exp1, exp2):
     return True
 
 
+# conversions
+def convert_postfix_to_prefix(postfix_expression):
+    stack = []
+    for token in postfix_expression:
+        if token in VARS or token in CONST:
+            stack.append(token)
+        elif token == '~':
+            c = stack.pop()
+            stack.append(['~', c])
+        elif token in OPS:
+            c = stack.pop()
+            d = stack.pop()
+            stack.append([token, d, c])
+    return stack[0]
+
+
 def convert_prefix_to_postfix(prefix_expression):
     s = []
-    for token in prefix_expression[::-1]:
+    for token in prefix_expression[::-1]:  # traverse prefix_expression from end to the beginning
         if token in VARS or token in CONST:
             out = token
         elif token == '~':
